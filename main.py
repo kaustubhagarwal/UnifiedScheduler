@@ -1,11 +1,12 @@
 import streamlit as st
 import datetime
+from datetime import time
 from services.google_calendar import GoogleCalendarService
 from services.apple_calendar import AppleCalendarService
 from services.task_manager import TaskManager
 from visualization.progress_charts import create_progress_chart, create_trend_chart
 from utils.deduplication import deduplicate_events
-from models.database import get_db
+from models.database import get_db, TaskType, RecurrencePattern
 
 # Initialize database
 next(get_db())
@@ -37,6 +38,10 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 1rem;
     }
+    .time-info {
+        color: #9e9e9e;
+        font-size: 0.9em;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -45,6 +50,8 @@ def initialize_session_state():
         st.session_state.task_manager = TaskManager()
     if 'selected_date' not in st.session_state:
         st.session_state.selected_date = datetime.date.today()
+    if 'show_task_type' not in st.session_state:
+        st.session_state.show_task_type = "Regular Task"
 
 def main():
     initialize_session_state()
@@ -114,6 +121,20 @@ def display_calendar_view():
 def display_task_management():
     st.header("✅ Task Management")
 
+    # Task type toggle
+    task_type = st.radio(
+        "View",
+        ["Regular Tasks", "Daily Activities", "All Tasks"],
+        horizontal=True
+    )
+
+    # Map selection to TaskType
+    task_type_map = {
+        "Regular Tasks": TaskType.REGULAR.value,
+        "Daily Activities": TaskType.DAILY.value,
+        "All Tasks": None
+    }
+
     # Create two columns for task input and task list
     col1, col2 = st.columns([1, 2])
 
@@ -122,30 +143,83 @@ def display_task_management():
         with st.form("new_task", clear_on_submit=True):
             task_title = st.text_input("Task Title")
             task_date = st.date_input("Task Date")
+            task_type_input = st.selectbox(
+                "Task Type",
+                [TaskType.REGULAR.value, TaskType.DAILY.value]
+            )
+
             task_priority = st.selectbox(
                 "Priority",
                 ["High", "Medium", "Low"],
                 format_func=lambda x: {"High": "🔴 High", "Medium": "🟡 Medium", "Low": "🟢 Low"}[x]
             )
+
+            # Time constraints
+            is_fixed_time = st.checkbox("Fixed Time Task")
+            fixed_time = None
+            flexible_start_time = None
+            flexible_end_time = None
+            estimated_duration = None
+
+            if is_fixed_time:
+                fixed_time = st.time_input("Fixed Time", time(9, 0))
+                estimated_duration = st.number_input("Estimated Duration (minutes)", min_value=5, value=30)
+            else:
+                col3, col4 = st.columns(2)
+                with col3:
+                    flexible_start_time = st.time_input("Flexible Start Time", time(9, 0))
+                with col4:
+                    flexible_end_time = st.time_input("Flexible End Time", time(17, 0))
+                estimated_duration = st.number_input("Estimated Duration (minutes)", min_value=5, value=30)
+
+            # Recurrence pattern for daily activities
+            recurrence_pattern = "None"
+            if task_type_input == TaskType.DAILY.value:
+                recurrence_pattern = st.selectbox(
+                    "Recurrence Pattern",
+                    [p.value for p in RecurrencePattern]
+                )
+
             submitted = st.form_submit_button("Add Task", use_container_width=True)
 
             if submitted and task_title:
-                st.session_state.task_manager.add_task(task_title, task_date, task_priority)
+                st.session_state.task_manager.add_task(
+                    title=task_title,
+                    date=task_date,
+                    priority=task_priority,
+                    task_type=task_type_input,
+                    is_fixed_time=is_fixed_time,
+                    fixed_time=fixed_time,
+                    flexible_start_time=flexible_start_time,
+                    flexible_end_time=flexible_end_time,
+                    recurrence_pattern=recurrence_pattern,
+                    estimated_duration=estimated_duration
+                )
                 st.success("Task added successfully!")
 
     with col2:
         st.markdown("### Your Tasks")
-        tasks = st.session_state.task_manager.get_tasks()
+        tasks = st.session_state.task_manager.get_tasks(task_type_map[task_type])
 
         if not tasks:
             st.info("No tasks added yet")
         else:
             for task in tasks:
                 with st.container():
+                    # Time information string
+                    time_info = ""
+                    if task['is_fixed_time'] and task['fixed_time']:
+                        time_info = f"🕒 Fixed Time: {task['fixed_time']}"
+                    elif task['flexible_start_time'] and task['flexible_end_time']:
+                        time_info = f"🕒 Flexible Time: {task['flexible_start_time']} - {task['flexible_end_time']}"
+
                     st.markdown(f"""
                     <div class="task-card">
                         <h3>{task['title']}</h3>
                         <p>📅 {task['date']} • {get_priority_icon(task['priority'])} {task['priority']}</p>
+                        <p class="time-info">{time_info}</p>
+                        <p class="time-info">⏱️ Duration: {task['estimated_duration']} minutes</p>
+                        <p class="time-info">🔄 {task['recurrence_pattern']}</p>
                     </div>
                     """, unsafe_allow_html=True)
                     status = st.select_slider(

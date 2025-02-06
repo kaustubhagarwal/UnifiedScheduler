@@ -1,33 +1,54 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import uuid
 from sqlalchemy.orm import Session
-from models.database import Task, TaskStatus, get_db
+from models.database import Task, TaskStatus, TaskType, RecurrencePattern, get_db
 from typing import List, Dict, Any
 
 class TaskManager:
     def __init__(self):
         self.db = next(get_db())
 
-    def add_task(self, title: str, date, priority: str) -> None:
+    def add_task(self, title: str, date, priority: str, task_type: str,
+                 is_fixed_time: bool = False, fixed_time: time = None,
+                 flexible_start_time: time = None, flexible_end_time: time = None,
+                 recurrence_pattern: str = "None", estimated_duration: int = None) -> None:
         new_task = Task(
             id=str(uuid.uuid4()),
             title=title,
             date=datetime.combine(date, datetime.min.time()),
             priority=priority,
-            status=TaskStatus.NOT_STARTED
+            status=TaskStatus.NOT_STARTED,
+            task_type=TaskType(task_type),
+            is_fixed_time=is_fixed_time,
+            fixed_time=fixed_time,
+            flexible_start_time=flexible_start_time,
+            flexible_end_time=flexible_end_time,
+            recurrence_pattern=RecurrencePattern(recurrence_pattern),
+            estimated_duration=estimated_duration
         )
         self.db.add(new_task)
         self.db.commit()
 
-    def get_tasks(self) -> List[Dict[str, Any]]:
-        tasks = self.db.query(Task).all()
+    def get_tasks(self, task_type: str = None) -> List[Dict[str, Any]]:
+        query = self.db.query(Task)
+        if task_type:
+            query = query.filter(Task.task_type == TaskType(task_type))
+
+        tasks = query.all()
         return [{
             'id': task.id,
             'title': task.title,
             'date': task.date.date().isoformat(),
             'priority': task.priority,
             'status': task.status.value,
-            'created_at': task.created_at.isoformat()
+            'created_at': task.created_at.isoformat(),
+            'task_type': task.task_type.value,
+            'is_fixed_time': task.is_fixed_time,
+            'fixed_time': task.fixed_time.strftime('%H:%M') if task.fixed_time else None,
+            'flexible_start_time': task.flexible_start_time.strftime('%H:%M') if task.flexible_start_time else None,
+            'flexible_end_time': task.flexible_end_time.strftime('%H:%M') if task.flexible_end_time else None,
+            'recurrence_pattern': task.recurrence_pattern.value,
+            'estimated_duration': task.estimated_duration
         } for task in tasks]
 
     def update_task_status(self, task_id: str, status: str) -> None:
