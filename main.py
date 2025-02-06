@@ -1,6 +1,6 @@
 import streamlit as st
 import datetime
-from datetime import time
+from datetime import time, date
 from services.google_calendar import GoogleCalendarService
 from services.apple_calendar import AppleCalendarService
 from services.task_manager import TaskManager
@@ -8,6 +8,10 @@ from visualization.progress_charts import create_progress_chart, create_trend_ch
 from utils.deduplication import deduplicate_events
 from models.database import get_db, TaskType, RecurrencePattern
 import os
+from services.ai_prioritization import AIPrioritization
+from services.gamification import GamificationService
+import json
+import plotly.express as px
 
 # Initialize database
 next(get_db())
@@ -19,29 +23,102 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS
+# Initialize AI and gamification services
+if 'ai_prioritization' not in st.session_state:
+    st.session_state.ai_prioritization = AIPrioritization()
+if 'gamification' not in st.session_state:
+    st.session_state.gamification = GamificationService()
+if 'user_stats' not in st.session_state:
+    st.session_state.user_stats = {
+        'points': 0,
+        'daily_streak': 0,
+        'weekly_streak': 0,
+        'achievements': [],
+        'last_active': datetime.datetime.now().isoformat()
+    }
+
+# Enhanced CSS with animations
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
+
     .main {
+        font-family: 'Poppins', sans-serif;
         padding: 2rem;
     }
+
     .stButton>button {
         width: 100%;
-        border-radius: 5px;
-        height: 3em;
-    }
-    .stSelectbox {
-        margin-bottom: 1rem;
-    }
-    .task-card {
-        background-color: #262730;
-        padding: 1rem;
         border-radius: 10px;
-        margin-bottom: 1rem;
+        height: 3em;
+        background: linear-gradient(45deg, #FF4B4B, #FF7676);
+        border: none;
+        color: white;
+        font-weight: 500;
+        transition: all 0.3s ease;
     }
+
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(255, 75, 75, 0.3);
+    }
+
+    .task-card {
+        background: linear-gradient(145deg, #2a2d3a, #1e2029);
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .task-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+
     .time-info {
         color: #9e9e9e;
         font-size: 0.9em;
+        margin-top: 0.5rem;
+    }
+
+    .achievement-card {
+        background: linear-gradient(145deg, #3d4250, #2a2d3a);
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        border: 1px solid #FF4B4B;
+        animation: glow 2s infinite alternate;
+    }
+
+    @keyframes glow {
+        from {
+            box-shadow: 0 0 5px #FF4B4B, 0 0 10px #FF4B4B;
+        }
+        to {
+            box-shadow: 0 0 10px #FF4B4B, 0 0 20px #FF4B4B;
+        }
+    }
+
+    .stats-card {
+        background: linear-gradient(145deg, #2a2d3a, #1e2029);
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+
+    .streak-count {
+        font-size: 2em;
+        font-weight: 600;
+        color: #FF4B4B;
+    }
+
+    .points-count {
+        font-size: 1.5em;
+        color: #00CC96;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -75,6 +152,8 @@ def main():
             ["📅 Calendar View", "✅ Task Management", "📊 Progress Analytics"],
             label_visibility="collapsed"
         )
+        display_user_stats()
+
 
     # Main content area
     if "Calendar" in page:
@@ -132,7 +211,7 @@ def display_calendar_view():
         if st.button("Connect Apple Calendar"):
             st.info("Apple Calendar integration requires additional system-level configuration. Please contact support for assistance.")
 
-    # Rest of the calendar view code remains the same
+    # Rest of the calendar view code 
     col1, col2 = st.columns([2, 1])
     with col1:
         selected_date = st.date_input(
@@ -274,9 +353,9 @@ def display_task_management():
                         value=task['status'],
                         key=f"status_{task['id']}"
                     )
-                    if status != task['status']:
-                        st.session_state.task_manager.update_task_status(task['id'], status)
+                    update_task_status(task['id'], status)
                     st.markdown("---")
+
 
 def display_progress_analytics():
     st.header("📊 Progress Analytics")
@@ -295,7 +374,7 @@ def display_progress_analytics():
     completion_data = st.session_state.task_manager.get_completion_stats(time_range)
 
     # Display summary metrics
-    total_tasks = (completion_data['completed'] + completion_data['partial'] + 
+    total_tasks = (completion_data['completed'] + completion_data['partial'] +
                   completion_data['not_started'])
     if total_tasks > 0:
         completion_rate = (completion_data['completed'] / total_tasks) * 100
@@ -356,6 +435,77 @@ def get_priority_icon(priority):
         "Low": "🟢"
     }
     return icons.get(priority, "")
+
+def display_user_stats():
+    """Display user statistics and achievements"""
+    st.sidebar.markdown("### 🏆 Your Progress")
+
+    # Display points and streaks
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        st.markdown(
+            f"""
+            <div class="stats-card">
+                <h4>Daily Streak</h4>
+                <div class="streak-count">🔥 {st.session_state.user_stats['daily_streak']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col2:
+        st.markdown(
+            f"""
+            <div class="stats-card">
+                <h4>Points</h4>
+                <div class="points-count">✨ {st.session_state.user_stats['points']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # Display achievements
+    if st.session_state.user_stats['achievements']:
+        st.sidebar.markdown("### 🎯 Achievements")
+        for achievement in st.session_state.user_stats['achievements']:
+            st.sidebar.markdown(
+                f"""
+                <div class="achievement-card">
+                    <h4>{achievement['name']}</h4>
+                    <p>{achievement['description']}</p>
+                    <p>+{achievement['points']} points</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+def update_task_status(task_id: str, new_status: str):
+    """Update task status and handle gamification"""
+    task = next((t for t in st.session_state.task_manager.get_tasks() if t['id'] == task_id), None)
+    if task and task['status'] != new_status:
+        # Update task status
+        st.session_state.task_manager.update_task_status(task_id, new_status)
+
+        # Calculate and award points
+        points = st.session_state.gamification.calculate_points(task, new_status)
+        st.session_state.user_stats['points'] += points
+
+        # Update streaks
+        st.session_state.user_stats = st.session_state.gamification.update_streak(
+            st.session_state.user_stats
+        )
+
+        # Check for new achievements
+        new_achievements = st.session_state.gamification.check_achievements(
+            st.session_state.user_stats,
+            st.session_state.task_manager.get_tasks()
+        )
+
+        if new_achievements:
+            for achievement in new_achievements:
+                st.session_state.user_stats['achievements'].append(achievement)
+                st.session_state.user_stats['points'] += achievement['points']
+                st.success(f"🎉 New Achievement Unlocked: {achievement['name']}!")
+
 
 if __name__ == "__main__":
     main()
