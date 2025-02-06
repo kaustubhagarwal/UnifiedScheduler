@@ -68,16 +68,42 @@ class TaskManager:
 
         tasks = self.db.query(Task).filter(Task.date >= start_date).all()
 
+        # Calculate completion rates by priority
+        priority_stats = {'High': {'total': 0, 'completed': 0},
+                         'Medium': {'total': 0, 'completed': 0},
+                         'Low': {'total': 0, 'completed': 0}}
+
+        for task in tasks:
+            priority_stats[task.priority]['total'] += 1
+            if task.status == TaskStatus.COMPLETED:
+                priority_stats[task.priority]['completed'] += 1
+
+        # Calculate best performing days
+        day_stats = {}
+        for task in tasks:
+            day = task.date.strftime('%A')
+            if day not in day_stats:
+                day_stats[day] = {'total': 0, 'completed': 0}
+            day_stats[day]['total'] += 1
+            if task.status == TaskStatus.COMPLETED:
+                day_stats[day]['completed'] += 1
+
         return {
             'completed': len([t for t in tasks if t.status == TaskStatus.COMPLETED]),
             'partial': len([t for t in tasks if t.status == TaskStatus.PARTIAL]),
             'not_started': len([t for t in tasks if t.status == TaskStatus.NOT_STARTED]),
+            'priority_stats': priority_stats,
+            'day_stats': day_stats,
             'tasks': [{
                 'id': t.id,
                 'title': t.title,
                 'date': t.date.date().isoformat(),
                 'priority': t.priority,
                 'status': t.status.value,
-                'created_at': t.created_at.isoformat()
+                'created_at': t.created_at.isoformat(),
+                'is_fixed_time': t.is_fixed_time,
+                'fixed_time': t.fixed_time.strftime('%H:%M') if t.fixed_time else None,
+                'flexible_start_time': t.flexible_start_time.strftime('%H:%M') if t.flexible_start_time else None,
+                'flexible_end_time': t.flexible_end_time.strftime('%H:%M') if t.flexible_end_time else None
             } for t in tasks]
         }

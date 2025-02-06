@@ -4,7 +4,7 @@ from datetime import time
 from services.google_calendar import GoogleCalendarService
 from services.apple_calendar import AppleCalendarService
 from services.task_manager import TaskManager
-from visualization.progress_charts import create_progress_chart, create_trend_chart
+from visualization.progress_charts import create_progress_chart, create_trend_chart, create_priority_completion_chart, create_time_distribution_chart
 from utils.deduplication import deduplicate_events
 from models.database import get_db, TaskType, RecurrencePattern
 
@@ -85,6 +85,24 @@ def main():
 
 def display_calendar_view():
     st.header("📅 Calendar View")
+
+    # Add calendar integration section
+    with st.expander("🔄 Calendar Integration Setup"):
+        st.markdown("""
+        ### Connect Your Calendars
+
+        1. **Google Calendar**
+        To connect your Google Calendar:
+        """)
+        if st.button("Connect Google Calendar"):
+            st.info("Please set up OAuth credentials in the project settings and configure the Google Calendar API")
+
+        st.markdown("""
+        2. **Apple Calendar**
+        To connect your Apple Calendar:
+        """)
+        if st.button("Connect Apple Calendar"):
+            st.info("Please configure Apple Calendar integration in your system settings")
 
     # Create columns for date selection and filters
     col1, col2 = st.columns([2, 1])
@@ -253,16 +271,55 @@ def display_progress_analytics():
                   completion_data['not_started'])
     if total_tasks > 0:
         completion_rate = (completion_data['completed'] / total_tasks) * 100
-        st.metric("Task Completion Rate", f"{completion_rate:.1f}%")
 
-    # Display charts in tabs
-    tab1, tab2 = st.tabs(["📊 Progress Overview", "📈 Trends"])
+        # Create metrics row
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Overall Completion Rate", f"{completion_rate:.1f}%")
+        with col2:
+            st.metric("Total Tasks", total_tasks)
+        with col3:
+            st.metric("Completed Tasks", completion_data['completed'])
 
-    with tab1:
-        st.plotly_chart(create_progress_chart(completion_data), use_container_width=True)
+        # Priority-based metrics
+        st.subheader("Priority-based Performance")
+        for priority, stats in completion_data['priority_stats'].items():
+            if stats['total'] > 0:
+                priority_completion = (stats['completed'] / stats['total']) * 100
+                st.metric(
+                    f"{priority} Priority Tasks",
+                    f"{priority_completion:.1f}%",
+                    f"{stats['completed']}/{stats['total']} completed"
+                )
 
-    with tab2:
-        st.plotly_chart(create_trend_chart(completion_data), use_container_width=True)
+        # Display charts in tabs
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📊 Overall Progress",
+            "🎯 Priority Analysis",
+            "📈 Trends",
+            "⏰ Time Distribution"
+        ])
+
+        with tab1:
+            st.plotly_chart(create_progress_chart(completion_data), use_container_width=True)
+
+        with tab2:
+            st.plotly_chart(create_priority_completion_chart(completion_data), use_container_width=True)
+
+        with tab3:
+            st.plotly_chart(create_trend_chart(completion_data), use_container_width=True)
+
+        with tab4:
+            st.plotly_chart(create_time_distribution_chart(completion_data), use_container_width=True)
+
+            # Best performing days
+            st.subheader("Best Performing Days")
+            day_stats = completion_data['day_stats']
+            for day, stats in day_stats.items():
+                if stats['total'] > 0:
+                    completion_rate = (stats['completed'] / stats['total']) * 100
+                    st.text(f"{day}: {completion_rate:.1f}% completion rate ({stats['completed']}/{stats['total']})")
+
 
 def get_priority_icon(priority):
     icons = {
