@@ -7,6 +7,7 @@ from services.task_manager import TaskManager
 from visualization.progress_charts import create_progress_chart, create_trend_chart, create_priority_completion_chart, create_time_distribution_chart
 from utils.deduplication import deduplicate_events
 from models.database import get_db, TaskType, RecurrencePattern
+import os
 
 # Initialize database
 next(get_db())
@@ -87,24 +88,51 @@ def display_calendar_view():
     st.header("📅 Calendar View")
 
     # Add calendar integration section
-    with st.expander("🔄 Calendar Integration Setup"):
+    with st.expander("🔄 Calendar Integration Setup", expanded=True):
         st.markdown("""
         ### Connect Your Calendars
 
         1. **Google Calendar**
-        To connect your Google Calendar:
+        To connect your Google Calendar, you'll need to:
+        1. Go to the [Google Cloud Console](https://console.cloud.google.com)
+        2. Create a new project or select an existing one
+        3. Enable the Google Calendar API
+        4. Create OAuth 2.0 credentials
+        5. Download the credentials file and rename it to 'credentials.json'
+        6. Upload it using the file uploader below
         """)
+
+        # File uploader for Google Calendar credentials
+        uploaded_file = st.file_uploader("Upload Google Calendar credentials.json", type=['json'])
+        if uploaded_file is not None:
+            # Save the uploaded credentials file
+            credentials_path = '.credentials'
+            if not os.path.exists(credentials_path):
+                os.makedirs(credentials_path)
+            with open(os.path.join(credentials_path, 'credentials.json'), 'wb') as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("Credentials uploaded successfully! Click 'Connect Google Calendar' to authenticate.")
+
         if st.button("Connect Google Calendar"):
-            st.info("Please set up OAuth credentials in the project settings and configure the Google Calendar API")
+            try:
+                google_calendar = GoogleCalendarService()
+                google_calendar.authenticate()
+                st.success("Successfully connected to Google Calendar!")
+            except Exception as e:
+                st.error(f"Error connecting to Google Calendar: {str(e)}")
 
         st.markdown("""
         2. **Apple Calendar**
         To connect your Apple Calendar:
+        1. Open System Preferences on your Mac
+        2. Go to Internet Accounts
+        3. Select your iCloud account
+        4. Enable Calendar sharing
         """)
         if st.button("Connect Apple Calendar"):
-            st.info("Please configure Apple Calendar integration in your system settings")
+            st.info("Apple Calendar integration requires additional system-level configuration. Please contact support for assistance.")
 
-    # Create columns for date selection and filters
+    # Rest of the calendar view code remains the same
     col1, col2 = st.columns([2, 1])
     with col1:
         selected_date = st.date_input(
