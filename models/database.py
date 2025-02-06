@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Enum, Boolean, Time
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Enum, Boolean, Time, Float, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 import os
 import enum
 from datetime import datetime, time
@@ -30,6 +30,18 @@ class RecurrencePattern(enum.Enum):
     WEEKLY = "Weekly"
     MONTHLY = "Monthly"
 
+class AccountType(enum.Enum):
+    BANK = "Bank Account"
+    CREDIT = "Credit Card"
+    CASH = "Cash"
+    INVESTMENT = "Investment"
+    OTHER = "Other"
+
+class TransactionType(enum.Enum):
+    INCOME = "Income"
+    EXPENSE = "Expense"
+    TRANSFER = "Transfer"
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -48,6 +60,49 @@ class Task(Base):
     flexible_end_time = Column(Time, nullable=True)
     recurrence_pattern = Column(Enum(RecurrencePattern), nullable=False, default=RecurrencePattern.NONE)
     estimated_duration = Column(Integer, nullable=True)  # Duration in minutes
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    type = Column(Enum(AccountType), nullable=False)
+    balance = Column(Float, nullable=False, default=0.0)
+    currency = Column(String, nullable=False, default="USD")
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    transactions = relationship("Transaction", back_populates="account")
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    color = Column(String, nullable=False)  # For visualization purposes
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    # Relationships
+    transactions = relationship("Transaction", back_populates="category")
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(String, primary_key=True)
+    account_id = Column(String, ForeignKey('accounts.id'), nullable=False)
+    category_id = Column(String, ForeignKey('categories.id'), nullable=False)
+    type = Column(Enum(TransactionType), nullable=False)
+    amount = Column(Float, nullable=False)
+    description = Column(Text, nullable=True)
+    date = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    # Relationships
+    account = relationship("Account", back_populates="transactions")
+    category = relationship("Category", back_populates="transactions")
 
 # Create all tables
 Base.metadata.create_all(bind=engine)

@@ -1,6 +1,5 @@
 import streamlit as st
-import datetime
-from datetime import time, date
+from datetime import datetime, time, date, timedelta
 from services.google_calendar import GoogleCalendarService
 from services.apple_calendar import AppleCalendarService
 from services.task_manager import TaskManager
@@ -12,6 +11,12 @@ from services.ai_prioritization import AIPrioritization
 from services.gamification import GamificationService
 import json
 import plotly.express as px
+from services.finance_manager import FinanceManager
+from visualization.finance_charts import (
+    create_spending_pie_chart, create_balance_trend_chart,
+    create_income_expense_bar_chart, create_daily_spending_chart
+)
+from models.finance import AccountType, TransactionType
 
 # Initialize database
 next(get_db())
@@ -34,8 +39,12 @@ if 'user_stats' not in st.session_state:
         'daily_streak': 0,
         'weekly_streak': 0,
         'achievements': [],
-        'last_active': datetime.datetime.now().isoformat()
+        'last_active': datetime.now().isoformat()
     }
+
+# Initialize finance manager in session state
+if 'finance_manager' not in st.session_state:
+    st.session_state.finance_manager = FinanceManager()
 
 # Enhanced CSS with animations
 st.markdown("""
@@ -127,7 +136,7 @@ def initialize_session_state():
     if 'task_manager' not in st.session_state:
         st.session_state.task_manager = TaskManager()
     if 'selected_date' not in st.session_state:
-        st.session_state.selected_date = datetime.date.today()
+        st.session_state.selected_date = date.today()
     if 'show_task_type' not in st.session_state:
         st.session_state.show_task_type = "Regular Task"
 
@@ -149,7 +158,7 @@ def main():
         st.markdown("## Navigation")
         page = st.radio(
             "",
-            ["📅 Calendar View", "✅ Task Management", "📊 Progress Analytics"],
+            ["📅 Calendar View", "✅ Task Management", "💰 Finance Tracker", "📊 Progress Analytics"],
             label_visibility="collapsed"
         )
         display_user_stats()
@@ -160,6 +169,8 @@ def main():
         display_calendar_view()
     elif "Task" in page:
         display_task_management()
+    elif "Finance" in page:
+        display_finance_tracker()
     else:
         display_progress_analytics()
 
@@ -505,6 +516,187 @@ def update_task_status(task_id: str, new_status: str):
                 st.session_state.user_stats['achievements'].append(achievement)
                 st.session_state.user_stats['points'] += achievement['points']
                 st.success(f"🎉 New Achievement Unlocked: {achievement['name']}!")
+
+
+def display_finance_tracker():
+    st.header("💰 Finance Tracker")
+
+    # Create tabs for different finance sections
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "💳 Accounts & Balances",
+        "📝 Transactions",
+        "📊 Analytics",
+        "⚙️ Categories"
+    ])
+
+    with tab1:
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            st.subheader("Add New Account")
+            with st.form("new_account", clear_on_submit=True):
+                account_name = st.text_input("Account Name")
+                account_type = st.selectbox(
+                    "Account Type",
+                    [type.value for type in AccountType]
+                )
+                initial_balance = st.number_input("Initial Balance", value=0.0)
+                currency = st.selectbox("Currency", ["USD", "EUR", "GBP"])
+                description = st.text_area("Description")
+
+                if st.form_submit_button("Add Account"):
+                    st.session_state.finance_manager.add_account(
+                        account_name, account_type, initial_balance,
+                        currency, description
+                    )
+                    st.success("Account added successfully!")
+
+        with col2:
+            st.subheader("Net Worth")
+            net_worth = st.session_state.finance_manager.get_net_worth()
+            st.markdown(f"""
+            <div class="stats-card">
+                <h3>Total Net Worth</h3>
+                <div class="points-count">${net_worth:,.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.subheader("Your Accounts")
+        accounts = st.session_state.finance_manager.get_accounts()
+        for account in accounts:
+            st.markdown(f"""
+            <div class="task-card">
+                <h3>{account['name']}</h3>
+                <p>Type: {account['type']}</p>
+                <p>Balance: {account['currency']} {account['balance']:,.2f}</p>
+                <p class="time-info">{account['description']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with tab2:
+        st.subheader("Add Transaction")
+        with st.form("new_transaction", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                account = st.selectbox(
+                    "Account",
+                    options=[acc['id'] for acc in accounts],
+                    format_func=lambda x: next((acc['name'] for acc in accounts if acc['id'] == x), "")
+                )
+                transaction_type = st.selectbox(
+                    "Transaction Type",
+                    [type.value for type in TransactionType]
+                )
+
+            with col2:
+                categories = st.session_state.finance_manager.get_categories()
+                category = st.selectbox(
+                    "Category",
+                    options=[cat['id'] for cat in categories],
+                    format_func=lambda x: next((cat['name'] for cat in categories if cat['id'] == x), "")
+                )
+                amount = st.number_input("Amount", min_value=0.0, value=0.0)
+
+            description = st.text_area("Description")
+            date = st.date_input("Date")
+
+            if st.form_submit_button("Add Transaction"):
+                transaction_date = datetime.combine(date, time.min)
+                st.session_state.finance_manager.add_transaction(
+                    account, category, transaction_type, amount,
+                    description, transaction_date
+                )
+                st.success("Transaction added successfully!")
+
+        st.subheader("Recent Transactions")
+        transactions = st.session_state.finance_manager.get_transactions()
+        for transaction in transactions:
+            st.markdown(f"""
+            <div class="task-card">
+                <h3>{transaction['description'] or transaction['type']}</h3>
+                <p>Amount: ${abs(transaction['amount']):,.2f}</p>
+                <p>Category: {transaction['category']}</p>
+                <p class="time-info">Account: {transaction['account']} • {transaction['date']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with tab3:
+        st.subheader("Financial Analytics")
+
+        # Time range selector for analytics
+        time_range = st.selectbox(
+            "Select Time Range",
+            ["Last Week", "Last Month", "Last 3 Months", "Last Year"]
+        )
+
+        # Calculate date range
+        end_date = datetime.now()
+        if time_range == "Last Week":
+            start_date = end_date - timedelta(days=7)
+        elif time_range == "Last Month":
+            start_date = end_date - timedelta(days=30)
+        elif time_range == "Last 3 Months":
+            start_date = end_date - timedelta(days=90)
+        else:
+            start_date = end_date - timedelta(days=365)
+
+        # Get filtered transactions
+        filtered_transactions = st.session_state.finance_manager.get_transactions(
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        # Display charts
+        col1, col2 = st.columns(2)
+        with col1:
+            spending_data = st.session_state.finance_manager.get_spending_by_category(
+                start_date, end_date
+            )
+            st.plotly_chart(
+                create_spending_pie_chart(spending_data),
+                use_container_width=True
+            )
+
+        with col2:
+            st.plotly_chart(
+                create_balance_trend_chart(filtered_transactions),
+                use_container_width=True
+            )
+
+        st.plotly_chart(
+            create_income_expense_bar_chart(filtered_transactions),
+            use_container_width=True
+        )
+
+        st.plotly_chart(
+            create_daily_spending_chart(filtered_transactions),
+            use_container_width=True
+        )
+
+    with tab4:
+        st.subheader("Add Category")
+        with st.form("new_category", clear_on_submit=True):
+            category_name = st.text_input("Category Name")
+            category_color = st.color_picker("Category Color", "#00CC96")
+            category_description = st.text_area("Description")
+
+            if st.form_submit_button("Add Category"):
+                st.session_state.finance_manager.add_category(
+                    category_name, category_color, category_description
+                )
+                st.success("Category added successfully!")
+
+        st.subheader("Existing Categories")
+        categories = st.session_state.finance_manager.get_categories()
+        for category in categories:
+            st.markdown(f"""
+            <div class="task-card">
+                <h3>{category['name']}</h3>
+                <p>Color: <span style="color: {category['color']}>■</span></p>
+                <p class="time-info">{category['description']}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
