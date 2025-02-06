@@ -655,23 +655,27 @@ def display_finance_tracker():
             )
             st.plotly_chart(
                 create_spending_pie_chart(spending_data),
-                use_container_width=True
+                use_container_width=True,
+                key="spending_pie_chart"
             )
 
         with col2:
             st.plotly_chart(
                 create_balance_trend_chart(filtered_transactions),
-                use_container_width=True
+                use_container_width=True,
+                key="balance_trend_chart"
             )
 
         st.plotly_chart(
             create_income_expense_bar_chart(filtered_transactions),
-            use_container_width=True
+            use_container_width=True,
+            key="income_expense_chart"
         )
 
         st.plotly_chart(
             create_daily_spending_chart(filtered_transactions),
-            use_container_width=True
+            use_container_width=True,
+            key="daily_spending_chart"
         )
 
     with tab4:
