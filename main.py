@@ -1,11 +1,14 @@
 import streamlit as st
 import datetime
-import json
 from services.google_calendar import GoogleCalendarService
 from services.apple_calendar import AppleCalendarService
 from services.task_manager import TaskManager
 from visualization.progress_charts import create_progress_chart, create_trend_chart
 from utils.deduplication import deduplicate_events
+from models.database import get_db
+
+# Initialize database
+next(get_db())
 
 def initialize_session_state():
     if 'task_manager' not in st.session_state:
