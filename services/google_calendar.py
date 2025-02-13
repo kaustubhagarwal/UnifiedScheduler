@@ -5,6 +5,8 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import datetime
 import pickle
+from datetime import timezone
+import pytz
 
 class GoogleCalendarService:
     SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
@@ -42,10 +44,16 @@ class GoogleCalendarService:
 
             service = build('calendar', 'v3', credentials=self.creds)
 
-            # Get the start and end of the specified date
-            start_time = datetime.datetime.combine(date, datetime.time.min).isoformat() + 'Z'
-            end_time = datetime.datetime.combine(date, datetime.time.max).isoformat() + 'Z'
+            # Get the start and end of the specified date in local time
+            local_tz = pytz.timezone('America/New_York')  # Replace with your local time zone
+            local_start_time = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=local_tz)
+            local_end_time = datetime.datetime.combine(date, datetime.time.max).replace(tzinfo=local_tz)
 
+            # Convert to UTC for Google Calendar API
+            start_time = local_start_time.astimezone(pytz.utc).isoformat()
+            end_time = local_end_time.astimezone(pytz.utc).isoformat()
+
+            # Fetch events within this range
             events_result = service.events().list(
                 calendarId='primary',
                 timeMin=start_time,
@@ -58,19 +66,28 @@ class GoogleCalendarService:
 
             formatted_events = []
             for event in events:
-                start = event['start'].get('dateTime', event['start'].get('date'))
-                end = event['end'].get('dateTime', event['end'].get('date'))
+                # Handle all-day vs timed events
+                if 'dateTime' in event['start']:
+                    start = event['start']['dateTime']
+                    end = event['end']['dateTime']
+                else:  # All-day event
+                    start = event['start']['date']
+                    end = event['end']['date']
 
-                # Convert to datetime objects
-                start_dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
-                end_dt = datetime.datetime.fromisoformat(end.replace('Z', '+00:00'))
+                # Convert to datetime objects (handle both date and dateTime)
+                if 'T' in start:  # Timed event
+                    start_dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00')).astimezone(local_tz)
+                    end_dt = datetime.datetime.fromisoformat(end.replace('Z', '+00:00')).astimezone(local_tz)
+                else:  # All-day event
+                    start_dt = datetime.datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=local_tz)
+                    end_dt = datetime.datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=local_tz)
 
                 # Calculate duration
                 duration = end_dt - start_dt
                 duration_str = f"{int(duration.total_seconds() / 3600)} hours" if duration.total_seconds() >= 3600 else f"{int(duration.total_seconds() / 60)} minutes"
 
                 formatted_events.append({
-                    'title': event['summary'],
+                    'title': event.get('summary', 'No Title'),
                     'start_time': start_dt.strftime('%H:%M'),
                     'duration': duration_str,
                     'source': 'Google Calendar'

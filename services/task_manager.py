@@ -107,3 +107,13 @@ class TaskManager:
                 'flexible_end_time': t.flexible_end_time.strftime('%H:%M') if t.flexible_end_time else None
             } for t in tasks]
         }
+    
+    def delete_task(self, task_id: str):
+        """Delete a task by its ID"""
+        db = next(get_db())  # Get the database session
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if task:
+            db.delete(task)
+            db.commit()
+            return True
+        return False

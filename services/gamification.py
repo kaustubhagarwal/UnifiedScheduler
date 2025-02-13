@@ -98,9 +98,10 @@ class GamificationService:
                 new_achievements.append(self.achievements['task_master'])
                 
         # Check Early Bird achievement
-        early_tasks = [t for t in today_tasks 
-                      if datetime.strptime(t['fixed_time'], '%H:%M').hour < 10 
-                      if t.get('fixed_time')]
+        early_tasks = [
+    t for t in today_tasks
+    if t.get('fixed_time') and datetime.strptime(t['fixed_time'], '%H:%M').hour < 10
+]
         if len(early_tasks) >= self.achievements['early_bird']['requirement']:
             if 'early_bird' not in user_stats.get('achievements', []):
                 new_achievements.append(self.achievements['early_bird'])
@@ -114,3 +115,13 @@ class GamificationService:
                 new_achievements.append(self.achievements['priority_handler'])
                 
         return new_achievements
+    
+    def delete_task(self, task_id: str):
+        """Delete a task by its ID"""
+        db = next(get_db())  # Get the database session
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if task:
+            db.delete(task)
+            db.commit()
+            return True
+        return False

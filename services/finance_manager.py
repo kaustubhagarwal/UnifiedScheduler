@@ -138,3 +138,18 @@ class FinanceManager:
             'color': result[1],
             'total': abs(result[2])
         } for result in results]
+    
+    def delete_account(self, account_id: str) -> bool:
+        """Delete an account and its associated transactions"""
+        # Fetch the account
+        account = self.db.query(Account).filter(Account.id == account_id).first()
+        if not account:
+            return False  # Account not found
+
+        # Delete all transactions associated with the account
+        self.db.query(Transaction).filter(Transaction.account_id == account_id).delete()
+
+        # Delete the account itself
+        self.db.delete(account)
+        self.db.commit()
+        return True

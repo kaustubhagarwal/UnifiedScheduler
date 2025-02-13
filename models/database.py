@@ -9,7 +9,7 @@ from datetime import datetime, time
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'local_database.db')}"
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

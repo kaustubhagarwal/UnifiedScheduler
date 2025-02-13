@@ -19,7 +19,16 @@ from visualization.finance_charts import (
 from models.finance import AccountType, TransactionType
 
 # Initialize database
-next(get_db())
+from models.database import Base, engine
+from google_auth_oauthlib.flow import InstalledAppFlow
+
+flow = InstalledAppFlow.from_client_secrets_file(
+    '/Users/kaustubhagarwal/Desktop/credentials.json',
+    scopes=['https://www.googleapis.com/auth/calendar']
+)
+
+# Ensure tables are created before running the app
+Base.metadata.create_all(bind=engine)
 
 # Set page configuration
 st.set_page_config(
@@ -342,7 +351,6 @@ def display_task_management():
         else:
             for task in tasks:
                 with st.container():
-                    # Time information string
                     time_info = ""
                     if task['is_fixed_time'] and task['fixed_time']:
                         time_info = f"🕒 Fixed Time: {task['fixed_time']}"
@@ -358,6 +366,7 @@ def display_task_management():
                         <p class="time-info">🔄 {task['recurrence_pattern']}</p>
                     </div>
                     """, unsafe_allow_html=True)
+
                     status = st.select_slider(
                         "Progress",
                         options=["Not Started", "Partial", "Completed"],
@@ -365,7 +374,23 @@ def display_task_management():
                         key=f"status_{task['id']}"
                     )
                     update_task_status(task['id'], status)
+
+                    # Delete button with refresh logic
+                    if st.button(f"Delete Task", key=f"delete_{task['id']}"):
+                        success = st.session_state.task_manager.delete_task(task['id'])
+                        if success:
+                            st.success(f"Task '{task['title']}' deleted successfully!")
+                            # Use one of the solutions below:
+                            # Solution 1: Update query params for refresh
+                            st.experimental_set_query_params(refresh=True)
+                            # Solution 2: Use JavaScript for full reload (optional)
+                            # st.write('<script>location.reload()</script>', unsafe_allow_html=True)
+                        else:
+                            st.error("Failed to delete the task.")
+
                     st.markdown("---")
+
+
 
 
 def display_progress_analytics():
@@ -564,14 +589,25 @@ def display_finance_tracker():
         st.subheader("Your Accounts")
         accounts = st.session_state.finance_manager.get_accounts()
         for account in accounts:
-            st.markdown(f"""
-            <div class="task-card">
-                <h3>{account['name']}</h3>
-                <p>Type: {account['type']}</p>
-                <p>Balance: {account['currency']} {account['balance']:,.2f}</p>
-                <p class="time-info">{account['description']}</p>
-            </div>
-            """, unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f"""
+                <div class="task-card">
+                    <h3>{account['name']}</h3>
+                    <p>Type: {account['type']}</p>
+                    <p>Balance: {account['currency']} {account['balance']:,.2f}</p>
+                    <p class="time-info">{account['description']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Add a delete button for each account
+                if st.button(f"Delete {account['name']}", key=f"delete_{account['id']}"):
+                    success = st.session_state.finance_manager.delete_account(account['id'])
+                    if success:
+                        st.success(f"Account '{account['name']}' deleted successfully!")
+                        st.experimental_set_query_params(refresh=True)
+                    else:
+                        st.error(f"Failed to delete account '{account['name']}'.")
+
 
     with tab2:
         st.subheader("Add Transaction")
