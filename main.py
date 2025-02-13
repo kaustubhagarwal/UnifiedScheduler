@@ -23,7 +23,7 @@ from models.database import Base, engine
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 flow = InstalledAppFlow.from_client_secrets_file(
-    '/Users/kaustubhagarwal/Desktop/credentials.json',
+    'credentials.json',
     scopes=['https://www.googleapis.com/auth/calendar']
 )
 
