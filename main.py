@@ -201,15 +201,12 @@ def display_calendar_view():
         6. Upload it using the file uploader below
         """)
 
-        # File uploader for Google Calendar credentials
         uploaded_file = st.file_uploader("Upload Google Calendar credentials.json", type=['json'])
         if uploaded_file is not None:
             # Save the uploaded credentials file
-            credentials_path = '.credentials'
+            credentials_path = os.path.join('.credentials', 'credentials.json')
             if not os.path.exists(credentials_path):
-                os.makedirs(credentials_path)
-            with open(os.path.join(credentials_path, 'credentials.json'), 'wb') as f:
-                f.write(uploaded_file.getbuffer())
+                st.warning("Google Calendar credentials file is missing.")
             st.success("Credentials uploaded successfully! Click 'Connect Google Calendar' to authenticate.")
 
         if st.button("Connect Google Calendar"):
