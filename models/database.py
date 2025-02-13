@@ -6,9 +6,8 @@ import enum
 from datetime import datetime, time
 
 # Get database URL from environment variable
-DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'local_database.db')}"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
